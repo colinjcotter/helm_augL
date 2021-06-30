@@ -57,7 +57,7 @@ class HelmholtzPC(fd.PCBase):
 
         def get_laplace(gamma,phi):
             h = fd.avg(fd.CellVolume(mesh))/fd.FacetArea(mesh)
-            eta = fd.Constant(10)
+            eta = fd.Constant(100.)
             mu = eta/h
             n = fd.FacetNormal(mesh)
             if (V.ufl_element().degree() == 0):
@@ -177,7 +177,7 @@ one = fd.Function(Q0).assign(1.)
 fpr -= fd.assemble(fpr*fd.dx)/fd.assemble(one*fd.dx)
 fpi -= fd.assemble(fpi*fd.dx)/fd.assemble(one*fd.dx)
 F = fd.inner(vr, fur)*fd.dx + fd.inner(vi, fui)*fd.dx
-F = (fpr*qr + fpi*qi)*fd.dx
+#F = (fpr*qr + fpi*qi)*fd.dx
 D1xu_r = D1r*ur - D1i*ui
 D2xu_r = D2r*ur - D2i*ui
 D1xp_r = D1r*pr - D1i*pi
@@ -188,8 +188,8 @@ D1xp_i = D1r*pi + D1i*pr
 D2xp_i = D2r*pi + D2i*pr
 
 a = (
-    fd.inner(vr, D1xu_r) + fd.div(vr)*D2xp_r
-    + fd.inner(vi, D1xu_i) + fd.div(vi)*D2xp_i
+    fd.inner(vr, D1xu_r) - fd.div(vr)*D2xp_r
+    + fd.inner(vi, D1xu_i) - fd.div(vi)*D2xp_i
     + qr*(D1xp_r + fd.div(D2xu_r))
     + qi*(D1xp_i + fd.div(D2xu_i))
     + gamma*(
