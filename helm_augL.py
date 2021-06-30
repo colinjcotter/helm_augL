@@ -45,6 +45,11 @@ class HelmholtzPC(fd.PCBase):
         sr = context.appctx.get("sr", None)
         si = context.appctx.get("si", None)
 
+        self.D1r = D1r
+        self.D1i = D1i
+        self.sr = sr
+        self.si = si
+
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
 
@@ -57,7 +62,7 @@ class HelmholtzPC(fd.PCBase):
 
         def get_laplace(gamma,phi):
             h = fd.avg(fd.CellVolume(mesh))/fd.FacetArea(mesh)
-            eta = fd.Constant(100.)
+            eta = fd.Constant(20.)
             mu = eta/h
             n = fd.FacetNormal(mesh)
             if (V.ufl_element().degree() == 0):
