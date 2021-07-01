@@ -4,6 +4,9 @@ import firedrake as fd
 import numpy as np
 from scipy.fft import fft, ifft
 
+import petsc4py.PETSc as PETSc
+PETSc.Sys.popErrorHandler()
+
 class HelmholtzPC(fd.PCBase):
 
     needs_python_pmat = True
@@ -44,7 +47,8 @@ class HelmholtzPC(fd.PCBase):
         D1i = context.appctx.get("D1i", None)
         sr = context.appctx.get("sr", None)
         si = context.appctx.get("si", None)
-
+        gamma = context.appctx.get("gamma", None)
+        
         self.D1r = D1r
         self.D1i = D1i
         self.sr = sr
@@ -53,6 +57,15 @@ class HelmholtzPC(fd.PCBase):
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
 
+        #mass solve
+        m = fd.inner(u,v)*fd.dx
+        sp = {
+            "ksp_type":"preonly",
+            "pc_type": "bjacobi",
+            "sub_pc_type":"ilu"
+        }
+        self.mSolver = fd.LinearSolver(assemble(m),
+                                       solver_parameters=sp)
         vr = v[0]
         vi = v[1]
         ur = u[0]
@@ -60,21 +73,18 @@ class HelmholtzPC(fd.PCBase):
         xr = self.xf[0]
         xi = self.xf[1]
 
-        def get_laplace(gamma,phi):
+        def get_laplace(q,phi):
             h = fd.avg(fd.CellVolume(mesh))/fd.FacetArea(mesh)
             eta = fd.Constant(20.)
             mu = eta/h
             n = fd.FacetNormal(mesh)
-            if (V.ufl_element().degree() == 0):
-                ad = 0
-            else:
-                ad = inner(fd.grad(gamma), fd.grad(phi)) * fd.dx
-            ad += (- inner(2 * fd.avg(phi*n),
-                          fd.avg(fd.grad(gamma)))
+            ad = (- inner(2 * fd.avg(phi*n),
+                          fd.avg(fd.grad(q)))
                   - inner(fd.avg(fd.grad(phi)),
-                          2 * fd.avg(gamma*n))
+                          2 * fd.avg(q*n))
                   + mu * inner(2 * fd.avg(phi*n),
-                               2 * fd.avg(gamma*n))) * fd.dS
+                               2 * fd.avg(q*n))) * fd.dS
+            ad += inner(fd.grad(q), fd.grad(phi)) * fd.dx
             return ad
 
         D2u_r = D2r*ur - D2i*ui
@@ -84,11 +94,20 @@ class HelmholtzPC(fd.PCBase):
 
         a = vr * D2u_r * dx + get_laplace(vr, su_r)
         a += vi * D2u_i * dx + get_laplace(vi, su_i)
-
-        L = get_laplace(xr, vr) + get_laplace(xi, vi)
+        L = get_laplace(xr, vr/gamma) + get_laplace(xi, vi/gamma)
 
         Hprob = fd.LinearVariationalProblem(a, L, self.yf)
-        self.solver = fd.LinearVariationalSolver(Hprob, options_prefix = options_prefix)
+        Hparameters = {
+            "ksp_type":"preonly",
+            "pc_type": "lu",
+            "pc_factor_mat_solver_type": "mumps"
+        }
+        nullspace = fd.VectorSpaceBasis(constant=True)
+        self.solver = fd.LinearVariationalSolver(Hprob,
+                                                 #nullspace = nullspace,
+                                                 solver_parameters = Hparameters,
+                                                 #options_prefix = options_prefix
+        )
 
     def update(self, pc):
         pass
@@ -98,6 +117,11 @@ class HelmholtzPC(fd.PCBase):
         with self.xf.dat.vec_wo as v:
             x.copy(v)
 
+        #solve mass matrix on xf, put solution in yf
+        self.mSolver.solve(self.yf, self.xf)
+        #copy into yf for RHS of Helmholtz operator
+        self.xf.assign(self.yf)
+        #Do Helmholtz solve
         self.solver.solve()
 
         # copy Function into petsc vec
@@ -136,7 +160,7 @@ Dt = T/M
 alphav = 0.01
 #timestep offset parameter
 thetav = 0.5
-gamma = fd.Constant(1.0e3)
+gamma = fd.Constant(1.0e6)
 
 # Gamma coefficients
 Nt = M
@@ -182,7 +206,7 @@ one = fd.Function(Q0).assign(1.)
 fpr -= fd.assemble(fpr*fd.dx)/fd.assemble(one*fd.dx)
 fpi -= fd.assemble(fpi*fd.dx)/fd.assemble(one*fd.dx)
 F = fd.inner(vr, fur)*fd.dx + fd.inner(vi, fui)*fd.dx
-#F = (fpr*qr + fpi*qi)*fd.dx
+F += (fpr*qr + fpi*qi)*fd.dx
 D1xu_r = D1r*ur - D1i*ui
 D2xu_r = D2r*ur - D2i*ui
 D1xp_r = D1r*pr - D1i*pi
@@ -221,13 +245,9 @@ bottomright = {
     "ksp_type": "gmres",
     "ksp_max_it": 60,
     "ksp_converged_reason": None,
-    "pc_type": "composite",
-    "pc_composite_type": "multiplicative",
-    "pc_composite_pcs": "python,python",
-    "sub_0_pc_python_type": "firedrake.MassInvPC",
-    "sub_0_Mp_pc_type": "ilu",
-    "sub_1_pc_python_type": "__main__.HelmholtzPC",
-    "sub_1_Hp_pc_type": "lu"
+    "ksp_monitor": None,
+    "pc_type": "python",
+    "pc_python_type": "__main__.HelmholtzPC"
 }
 
 diag_parameters["fieldsplit_1"] = bottomright
@@ -249,8 +269,8 @@ v_basis = fd.VectorSpaceBasis(constant=True)
 nullspace = fd.MixedVectorSpaceBasis(W, [W.sub(0), v_basis])
 solver = fd.LinearVariationalSolver(prob, solver_parameters=diag_parameters,
                                     appctx={"D1r": D1r, "D1i": D1i,
-                                            "sr": sr, "si": si},
-                                    nullspace=nullspace)
+                                            "sr": sr, "si": si,
+                                            "gamma": gamma})
 
 u, D = w.split()
 err = fd.Function(W)
