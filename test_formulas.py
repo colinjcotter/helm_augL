@@ -124,9 +124,31 @@ eqn = (pr*qr + pi*qi
 p_exact = fd.Function(Q)
 p_exact_prob = fd.LinearVariationalProblem(fd.lhs(eqn), fd.rhs(eqn),
                                            p_exact)
+v_basis = fd.VectorSpaceBasis(constant=True)
 p_exact_solver = fd.LinearVariationalSolver(p_exact_prob,
                                             solver_parameters=
-                                            ud_parameters)
+                                            ud_parameters,
+                                            nullspace=v_basis)
+
+W = V * Q
+u, p = fd.TrialFunctions(W)
+v, q = fd.TestFunctions(W)
+
+ur = u[0, :]
+ui = u[1, :]
+pr = p[0]
+pi = p[1]
+vr = v[0, :]
+vi = v[1, :]
+qr = q[0]
+qi = q[1]
+
+eqn = (
+    fd.inner(vr, ur) + fd.inner(vi, ui)
+    - fd.div(vr)*pr - fd.div(ui)*pi
+    + qr*fd.div(ur) + qi*fd.div(ui)
+    - qr*fpr - qi*fpi
+    )*fd.dx
 
 for i in range(M):
     D1i.assign(np.imag(D1[i]))
