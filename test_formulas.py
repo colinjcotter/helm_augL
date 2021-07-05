@@ -35,7 +35,7 @@ Dt = T/M
 alphav = 0.01
 #timestep offset parameter
 thetav = 0.5
-gamma = fd.Constant(1.0e4)
+gamma = fd.Constant(1.0e6)
 
 # Gamma coefficients
 Nt = M
@@ -64,8 +64,8 @@ p1 = fd.sin(fd.pi*x)*fd.sin(fd.pi*y)
 p2 = fd.cos(2*fd.pi*x)*fd.sin(4*fd.pi*y)
 fur = fd.as_vector([fd.exp(p1+2*p2), fd.cos(2*p2 - p1)])
 fui = fd.as_vector([fd.sin(3*p1+2*p2), fd.exp(3*p2 + 2*p1)])
-fpr = fd.Function(Q0).interpolate(fd.cos(fd.sin(p1+p2)))
-fpi = fd.Function(Q0).interpolate(fd.sin(fd.exp(2*p1-p2)))
+fpr = fd.Function(Q0, name='fpr').interpolate(fd.cos(fd.sin(p1+p2)))
+fpi = fd.Function(Q0, name='fpi').interpolate(fd.sin(fd.cos(2*p1-p2)))
 one = fd.Function(Q0).assign(1.)
 fpr -= fd.assemble(fpr*fd.dx)/fd.assemble(one*fd.dx)
 fpi -= fd.assemble(fpi*fd.dx)/fd.assemble(one*fd.dx)
@@ -158,8 +158,8 @@ laplace_solver = fd.LinearVariationalSolver(laplace_prob,
                                             laplace_parameters,
                                             nullspace=nullspace)
 
-psir = fd.Function(Q0)
-psii = fd.Function(Q0)
+psir = fd.Function(Q0, name='psir')
+psii = fd.Function(Q0, name='psii')
 
 p = fd.TrialFunction(Q)
 pr = p[0]
@@ -168,21 +168,20 @@ q = fd.TestFunction(Q)
 qr = q[0]
 qi = q[1]
 
-D1xp_r = D1r*fpr - D1i*fpi
-D2xp_r = D2r*fpr - D2i*fpi
+Dwxp_r = (D2r*fpr - D2i*fpi)
+D2xp_i = (D2r*fpi + D2i*fpr)
 
 sr = fd.Constant(0.)
 si = fd.Constant(0.)
 
-sxp_r = sr*psir - si*psii
-sxp_i = sr*psii + si*psir
+sxpsi_r = (sr*psir - si*psii)
+sxpsi_i = (sr*psii + si*psir)
 
-eqn = (pr*qr + pi*qi
+eqn = ((pr*qr + pi*qi)*gamma
        - (
-           qr*(D2xp_r + sxp_r) +
-           qi*(D2xp_i + sxp_i)
-       )
-       )*fd.dx
+           qr*(D2xp_r + sxpsi_r) +
+           qi*(D2xp_i + sxpsi_i)
+       ))*fd.dx
 
 p_approx = fd.Function(Q, name='approx')
 p_approx_prob = fd.LinearVariationalProblem(fd.lhs(eqn),
@@ -215,4 +214,4 @@ for i in range(M):
     psii.assign(psi0)
     p_approx_solver.solve()
     p_error.assign(p_approx - p_exact)
-    file0.write(p_exact, p_approx, p_error)
+    file0.write(p_exact, p_approx, p_error, psir, psii, fpi, fpr)
