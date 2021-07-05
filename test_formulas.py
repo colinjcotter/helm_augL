@@ -84,7 +84,7 @@ D2xp_i = D2r*fpi + D2i*fpr
 
 eqn = (
     fd.inner(vr, D1xu_r) + fd.inner(vi, D1xu_i)
-    - fd.div(vr)*(D2xp_r) - fd.div(vr)*D2xp_r
+    - fd.div(vr)*(D2xp_r) - fd.div(vi)*D2xp_i
     + gamma*(fd.div(vr)*(D1xp_r + fd.div(D2xu_r))
              +fd.div(vi)*(D1xp_i + fd.div(D2xu_i)))
     )*fd.dx
