@@ -121,7 +121,7 @@ eqn = (pr*qr + pi*qi
        )
        )*fd.dx
 
-p_exact = fd.Function(Q)
+p_exact = fd.Function(Q, name='exact')
 p_exact_prob = fd.LinearVariationalProblem(fd.lhs(eqn), fd.rhs(eqn),
                                            p_exact)
 v_basis = fd.VectorSpaceBasis(constant=True)
@@ -130,24 +130,16 @@ p_exact_solver = fd.LinearVariationalSolver(p_exact_prob,
                                             ud_parameters,
                                             nullspace=v_basis)
 
-W = V * Q
+V0 = fd.FunctionSpace(mesh, "BDM", degree+1)
+W = V0 * Q0
 u, p = fd.TrialFunctions(W)
 v, q = fd.TestFunctions(W)
 
-ur = u[0, :]
-ui = u[1, :]
-pr = p[0]
-pi = p[1]
-vr = v[0, :]
-vi = v[1, :]
-qr = q[0]
-qi = q[1]
-
+psirhs = fd.Function(Q0)
 eqn = (
-    fd.inner(vr, ur) + fd.inner(vi, ui)
-    - fd.div(vr)*pr - fd.div(ui)*pi
-    + qr*fd.div(ur) + qi*fd.div(ui)
-    - qr*fpr - qi*fpi
+    fd.inner(v, u) - fd.div(v)*p
+    + q*fd.div(u)
+    - q*psirhs
     )*fd.dx
 
 w = fd.Function(W)
@@ -166,9 +158,8 @@ laplace_solver = fd.LinearVariationalSolver(laplace_prob,
                                             laplace_parameters,
                                             nullspace=nullspace)
 
-u, p = fd.split(w)
-psir = p[0]
-psii = p[1]
+psir = fd.Function(Q0)
+psii = fd.Function(Q0)
 
 p = fd.TrialFunction(Q)
 pr = p[0]
@@ -193,17 +184,17 @@ eqn = (pr*qr + pi*qi
        )
        )*fd.dx
 
-p_approx = fd.Function(Q)
+p_approx = fd.Function(Q, name='approx')
 p_approx_prob = fd.LinearVariationalProblem(fd.lhs(eqn),
                                             fd.rhs(eqn),
                                             p_approx)
-p_approx_solver = fd.LinearVariationalSolver(p_exact_prob,
+p_approx_solver = fd.LinearVariationalSolver(p_approx_prob,
                                              solver_parameters=
                                              ud_parameters,
                                              nullspace=v_basis)
 
 file0 = fd.File('test_formulas.pvd')
-p_error = fd.Function(Q)
+p_error = fd.Function(Q, name='error')
 
 for i in range(M):
     D1i.assign(np.imag(D1[i]))
@@ -215,6 +206,13 @@ for i in range(M):
     sigma = D1[i]**2/D2[i]
     sr.assign(np.real(sigma))
     si.assign(np.imag(sigma))
+    psirhs.assign(fpr)
+    laplace_solver.solve()
+    v, psi0 = w.split()
+    psir.assign(psi0)
+    psirhs.assign(fpi)
+    laplace_solver.solve()
+    psii.assign(psi0)
     p_approx_solver.solve()
     p_error.assign(p_approx - p_exact)
     file0.write(p_exact, p_approx, p_error)
