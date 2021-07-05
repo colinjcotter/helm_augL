@@ -150,6 +150,61 @@ eqn = (
     - qr*fpr - qi*fpi
     )*fd.dx
 
+w = fd.Function(W)
+
+laplace_parameters = {
+    'mat_type':'aij',
+    'ksp_type':'preonly',
+    'pc_type':'lu',
+    "pc_factor_mat_solver_type": "mumps"
+}
+
+laplace_prob = fd.LinearVariationalProblem(fd.lhs(eqn), fd.rhs(eqn), w)
+nullspace = fd.MixedVectorSpaceBasis(W, [W.sub(0), v_basis])
+laplace_solver = fd.LinearVariationalSolver(laplace_prob,
+                                            solver_parameters=
+                                            laplace_parameters,
+                                            nullspace=nullspace)
+
+u, p = fd.split(w)
+psir = p[0]
+psii = p[1]
+
+p = fd.TrialFunction(Q)
+pr = p[0]
+pi = p[1]
+q = fd.TestFunction(Q)
+qr = q[0]
+qi = q[1]
+
+D1xp_r = D1r*fpr - D1i*fpi
+D2xp_r = D2r*fpr - D2i*fpi
+
+sr = fd.Constant(0.)
+si = fd.Constant(0.)
+
+sxp_r = sr*psir - si*psii
+sxp_i = sr*psii + si*psir
+
+eqn = (pr*qr + pi*qi
+       - (
+           qr*(D2xp_r + sxp_r) +
+           qi*(D2xp_i + sxp_i)
+       )
+       )*fd.dx
+
+p_approx = fd.Function(Q)
+p_approx_prob = fd.LinearVariationalProblem(fd.lhs(eqn),
+                                            fd.rhs(eqn),
+                                            p_approx)
+p_approx_solver = fd.LinearVariationalSolver(p_exact_prob,
+                                             solver_parameters=
+                                             ud_parameters,
+                                             nullspace=v_basis)
+
+file0 = fd.File('test_formulas.pvd')
+p_error = fd.Function(Q)
+
 for i in range(M):
     D1i.assign(np.imag(D1[i]))
     D1r.assign(np.real(D1[i]))
@@ -157,3 +212,9 @@ for i in range(M):
     D2r.assign(np.real(D2[i]))
     uD_solver.solve()
     p_exact_solver.solve()
+    sigma = D1[i]**2/D2[i]
+    sr.assign(np.real(sigma))
+    si.assign(np.imag(sigma))
+    p_approx_solver.solve()
+    p_error.assign(p_approx - p_exact)
+    file0.write(p_exact, p_approx, p_error)
