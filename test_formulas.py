@@ -192,6 +192,31 @@ p_approx_solver = fd.LinearVariationalSolver(p_approx_prob,
                                              ud_parameters,
                                              nullspace=v_basis)
 
+#now to make a Helmholtz applier
+W = V * Q
+u, p = fd.TrialFunctions(W)
+v, q = fd.TestFunctions(W)
+
+ur = u[0, :]
+ui = u[1, :]
+pr = p[0]
+pi = p[1]
+vr = v[0, :]
+vi = v[1, :]
+qr = q[0]
+qi = q[1]
+
+sxp_r = (sr*pr - si*pi)
+sxp_i = (sr*pi + si*pr)
+eqn = (
+    (pr*qr + pi*qi)*gamma
+       - (
+           qr*(D2xp_r + sxpsi_r) +
+           qi*(D2xp_i + sxpsi_i)
+       ))*fd.dx
+ewrgwerg
+need two stages, to get the gradient first
+
 file0 = fd.File('test_formulas.pvd')
 p_error = fd.Function(Q, name='error')
 
