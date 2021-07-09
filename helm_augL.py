@@ -28,8 +28,8 @@ qr = q[0]
 qi = q[1]
 
 #number of steps
-T = 1.
-M = 20
+T = 0.1
+M = 10
 Dt = T/M
 #timestep
 #circulant coefficient
@@ -118,13 +118,34 @@ diag_parameters = {
 }
 
 # change the bottom right part:
+Hparameters = {
+    "ksp_type":"preonly",
+    "pc_type": "lu",
+    "pc_factor_mat_solver_type": "mumps"
+}
+
+mass_options = {
+    'ksp_type': 'preonly',
+    'pc_type': 'fieldsplit',
+    'pc_fieldsplit_type': 'additive',
+    'fieldsplit_0_ksp_type': 'cg',
+    'fieldsplit_0_pc_type': 'bjacobi',
+    'fieldsplit_0_sub_pc_type': 'icc',
+    'fieldsplit_0_ksp_atol': 1.0e-50,
+    'fieldsplit_0_ksp_rtol': 1.0e-12,
+    'fieldsplit_0_ksp_type': 'preonly',
+    'fieldsplit_0_pc_type': 'bjacobi',
+    'fieldsplit_0_sub_pc_type': 'icc'
+}
+
 bottomright = {
     "ksp_type": "gmres",
     "ksp_gmres_modifiedgramschmidt": None,
-    "ksp_converged_reason": None,
     "ksp_max_it": 3,
     "pc_type": "python",
-    "pc_python_type": "asQ.HelmholtzPC"
+    "pc_python_type": "asQ.HelmholtzPC",
+    "Hp": Hparameters,
+    "mass": mass_options
 }
 
 diag_parameters["fieldsplit_1"] = bottomright
