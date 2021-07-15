@@ -1,5 +1,6 @@
 import firedrake as fd
 from petsc4py import PETSc
+import asQ
 PETSc.Sys.popErrorHandler()
 
 #get command arguments
@@ -97,8 +98,8 @@ def form_function(u, h, v, q):
     )
 
 def form_mass(u, h, v, q):
-    return fd.inner(u, v)*fd.dx + h*q*.fd.dx
-    
+    return fd.inner(u, v)*fd.dx + h*q*fd.dx
+
 class HelmholtzPC(fd.AuxiliaryOperatorPC):
     
     def form(self, pc, v, u):
@@ -267,7 +268,8 @@ u_0 = 20.0  # maximum amplitude of the zonal wind [m/s]
 u_max = fd.Constant(u_0)
 u_expr = fd.as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
 eta_expr = - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
-w0 = V1 * V2
+W = V1 * V2
+w0 = fd.Function(W)
 un, etan = w0.split()
 un.project(u_expr)
 etan.project(eta_expr)
