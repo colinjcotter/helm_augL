@@ -71,27 +71,22 @@ f = 2*Omega*cz/fd.Constant(R0)  # Coriolis parameter
 g = fd.Constant(9.8)  # Gravitational constant
 b = fd.Function(V2, name="Topography")
 c = fd.sqrt(g*H)
-
+dT = fd.Constant(0.)
 # D = eta + b
-
-u0, h0 = fd.split(Un)
-u1, h1 = fd.split(Unp1)
-uh = 0.5*(u0 + u1)
-hh = 0.5*(h0 + h1)
-n = fd.FacetNormal(mesh)
-Upwind = 0.5 * (fd.sign(fd.dot(uh, n)) + 1)
 
 def both(u):
     return 2*fd.avg(u)
 
 def form_function(u, h, v, q):
-    K = 0.5*fd.inner(u)
+    K = 0.5*fd.inner(u, u)
     uup = 0.5 * (fd.dot(u, n) + abs(fd.dot(u, n)))
     dS = fd.dS
     dx = fd.dx
-
+    n = fd.FacetNormal(mesh)
+    Upwind = 0.5 * (fd.sign(fd.dot(u, n)) + 1)
+    
     eqn = (
-        dT*fd.inner(v, f*perp(u))*fd.dx
+        fd.inner(v, f*perp(u))*fd.dx
         - fd.inner(perp(fd.grad(fd.inner(v, perp(u)))), u)*fd.dx
         + fd.inner(both(perp(n)*fd.inner(v, perp(u))),
                    both(Upwind*u))*fd.dS
@@ -125,19 +120,6 @@ class HelmholtzPC(fd.AuxiliaryOperatorPC):
         #Returning None as bcs
         return (a, None)
 
-# U_t + N(U) = 0
-# IMPLICIT MIDPOINT
-# U^{n+1} - U^n + dt*N( (U^{n+1}+U^n)/2 ) = 0.
-
-# TRAPEZOIDAL RULE
-# U^{n+1} - U^n + dt*( N(U^{n+1}) + N(U^n) )/2 = 0.
-    
-# Newton's method
-# f(x) = 0, f:R^M -> R^M
-# [Df(x)]_{i,j} = df_i/dx_j
-# x^0, x^1, ...
-# Df(x^k).xp = -f(x^k)
-# x^{k+1} = x^k + xp.
 sparameters = {
     "mat_type":"matfree",
     'snes_monitor': None,
