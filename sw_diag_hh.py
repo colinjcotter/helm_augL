@@ -112,7 +112,7 @@ class HelmholtzPC(fd.AuxiliaryOperatorPC):
         ur = u[0]
         ui = u[1]
         
-        eta = fd.Constant(context.appctx.get("eta", 20.))
+        eta = fd.Constant(context.appctx.get("eta", 10.))
         D1r = context.appctx.get("D1r", None)
         assert(D1r)
         D1i = context.appctx.get("D1i", None)
@@ -150,8 +150,7 @@ sparameters = {
     "mat_type":"matfree",
     "ksp_type": "fgmres",
     "ksp_gmres_modifiedgramschmidt": None,
-    'ksp_monitor': None,
-    #'ksp_view': None,
+    'ksp_converged_reason': None,
     "ksp_rtol": 1e-8,
     "pc_type": "fieldsplit",
     "pc_fieldsplit_type": "schur",
@@ -264,6 +263,7 @@ solver_parameters_diag = {
     'snes_monitor': None,
     'mat_type': 'matfree',
     'ksp_type': 'fgmres',
+    'ksp_monitor': None,
     "ksp_gmres_modifiedgramschmidt": None,
     'ksp_converged_reason': None,
     'ksp_monitor': None,
@@ -300,8 +300,8 @@ minarg = fd.Min(pow(rl, 2),
 bexpr = 2000.0*(1 - fd.sqrt(minarg)/rl)
 b.interpolate(bexpr)
 
-alpha = fd.Constant(0.01)
-theta = fd.Constant(0.5)
+alpha = 0.01
+theta = 0.5
 
 PD = asQ.paradiag(form_function=form_function,
                   form_mass=form_mass, W=W, w0=w0, dt=dt,
