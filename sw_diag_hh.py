@@ -7,7 +7,7 @@ PETSc.Sys.popErrorHandler()
 import argparse
 parser = argparse.ArgumentParser(description='Williamson 5 testcase for approximate Schur complement solver.')
 parser.add_argument('--base_level', type=int, default=1, help='Base refinement level of icosahedral grid for MG solve. Default 1.')
-parser.add_argument('--ref_level', type=int, default=5, help='Refinement level of icosahedral grid. Default 5.')
+parser.add_argument('--ref_level', type=int, default=3, help='Refinement level of icosahedral grid. Default 3.')
 parser.add_argument('--nsteps', type=float, default=4, help='Number of timesteps. Default 4.')
 parser.add_argument('--dumpt', type=float, default=24, help='Dump time in hours. Default 24.')
 parser.add_argument('--dt', type=float, default=1, help='Timestep in hours. Default 1.')
@@ -16,7 +16,7 @@ parser.add_argument('--coords_degree', type=int, default=1, help='Degree of poly
 parser.add_argument('--degree', type=int, default=1, help='Degree of finite element space (the DG space).')
 parser.add_argument('--kspschur', type=int, default=3, help='Number of KSP iterations on the Schur complement.')
 parser.add_argument('--kspmg', type=int, default=3, help='Number of KSP iterations in the MG levels.')
-parser.add_argument('--tlblock', type=str, default='mg', help='Solver for the velocity-velocity block. mg==Multigrid with patchPC, lu==direct solver with MUMPS, patch==just do a patch smoother. Default is mg')
+parser.add_argument('--tlblock', type=str, default='patch', help='Solver for the velocity-velocity block. mg==Multigrid with patchPC, lu==direct solver with MUMPS, patch==just do a patch smoother. Default is patch')
 parser.add_argument('--show_args', action='store_true', help='Output all the arguments.')
 args = parser.parse_known_args()
 args = args[0]
@@ -80,10 +80,10 @@ def both(u):
 
 def form_function(u, h, v, q):
     K = 0.5*fd.inner(u, u)
+    n = fd.FacetNormal(mesh)
     uup = 0.5 * (fd.dot(u, n) + abs(fd.dot(u, n)))
     dS = fd.dS
     dx = fd.dx
-    n = fd.FacetNormal(mesh)
     Upwind = 0.5 * (fd.sign(fd.dot(u, n)) + 1)
     
     eqn = (
@@ -92,11 +92,12 @@ def form_function(u, h, v, q):
         + fd.inner(both(perp(n)*fd.inner(v, perp(u))),
                    both(Upwind*u))*fd.dS
         - fd.div(v)*(g*(h + b) + K)*fd.dx
-        - fd.inner(fd.grad(phi), uh)*hh*fd.dx
-        + fd.jump(phi)*(uup('+')*hh('+')
-                        - uup('-')*hh('-'))*fd.dS
+        - fd.inner(fd.grad(q), u)*h*fd.dx
+        + fd.jump(q)*(uup('+')*h('+')
+                      - uup('-')*h('-'))*fd.dS
     )
-
+    return eqn
+    
 def form_mass(u, h, v, q):
     return fd.inner(u, v)*fd.dx + h*q*fd.dx
 
@@ -139,15 +140,14 @@ class HelmholtzPC(fd.AuxiliaryOperatorPC):
         su_r = sr*ur - si*ui
         su_i = si*ur + sr*ui
         
-        a = vr * D1u_r * dx + get_laplace(vr, su_r)
-        a += vi * D1u_i * dx + get_laplace(vi, su_i)
+        a = vr * D1u_r * fd.dx + get_laplace(vr, su_r)
+        a += vi * D1u_i * fd.dx + get_laplace(vi, su_i)
 
         #Returning None as bcs
         return (a, None)
 
 sparameters = {
     "mat_type":"matfree",
-    'snes_monitor': None,
     "ksp_type": "fgmres",
     "ksp_gmres_modifiedgramschmidt": None,
     'ksp_monitor': None,
@@ -259,6 +259,21 @@ else:
     assert(args.tlblock=="lu")
     sparameters["fieldsplit_0"] = topleft_LU
 
+solver_parameters_diag = {
+    #'snes_type': 'ksponly',
+    'snes_monitor': None,
+    'mat_type': 'matfree',
+    'ksp_type': 'fgmres',
+    "ksp_gmres_modifiedgramschmidt": None,
+    'ksp_converged_reason': None,
+    'ksp_monitor': None,
+    'ksp_max_it': 60,
+    'ksp_rtol': 1.0e-5,
+    'ksp_atol': 1.0e-30,
+    'pc_type': 'python',
+    'pc_python_type': 'asQ.DiagFFTPC',
+    'diagfft': sparameters}
+    
 dt = 60*60*args.dt
 dT.assign(dt)
 t = 0.
