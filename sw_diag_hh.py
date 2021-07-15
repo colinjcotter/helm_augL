@@ -99,10 +99,27 @@ def form_function(u, h, v, q):
 def form_mass(u, h, v, q):
     return fd.inner(u, v)*fd.dx + h*q*.fd.dx
     
-eta = fd.Constant(10.)
 class HelmholtzPC(fd.AuxiliaryOperatorPC):
     
-    def form(self, pc, phi, q):
+    def form(self, pc, v, u):
+        _, P = pc.getOperators()
+        context = P.getPythonContext()
+
+        vr = v[0]
+        vi = v[1]
+        ur = u[0]
+        ui = u[1]
+        
+        eta = fd.Constant(context.appctx.get("eta", 20.))
+        D1r = context.appctx.get("D1r", None)
+        assert(D1r)
+        D1i = context.appctx.get("D1i", None)
+        assert(D1i)
+        sr = context.appctx.get("sinvr", None)
+        assert(sr)
+        si = context.appctx.get("sinvi", None)
+        assert(si)
+        r = fd.Constant(context.appctx.get("helmcoeff", 1.0))
         def get_laplace(q,phi):
             h = fd.avg(fd.CellVolume(mesh))/fd.FacetArea(mesh)
             mu = eta/h
@@ -115,8 +132,15 @@ class HelmholtzPC(fd.AuxiliaryOperatorPC):
                                   2 * fd.avg(q*n))) * fd.dS
             ad += fd.inner(fd.grad(q), fd.grad(phi)) * fd.dx
             return ad
+        
+        D1u_r = D1r*ur - D1i*ui
+        D1u_i = D1i*ur + D1r*ui
+        su_r = sr*ur - si*ui
+        su_i = si*ur + sr*ui
+        
+        a = vr * D1u_r * dx + get_laplace(vr, su_r)
+        a += vi * D1u_i * dx + get_laplace(vi, su_i)
 
-        a = phi*q*fd.dx + g*H*dT**2*0.25*get_laplace(q, phi/(1 + (f*dt*0.5)**2))
         #Returning None as bcs
         return (a, None)
 
