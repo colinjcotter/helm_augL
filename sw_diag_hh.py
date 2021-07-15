@@ -262,24 +262,15 @@ dt = 60*60*args.dt
 dT.assign(dt)
 t = 0.
 
-nprob = fd.NonlinearVariationalProblem(eqn, Unp1)
-nsolver = fd.NonlinearVariationalSolver(nprob,
-                                        solver_parameters=sparameters)
-
-dmax = args.dmax
-hmax = 24*dmax
-tmax = 60.*60.*hmax
-hdump = args.dumpt
-dumpt = hdump*60.*60.
-tdump = 0.
-
 x = fd.SpatialCoordinate(mesh)
 u_0 = 20.0  # maximum amplitude of the zonal wind [m/s]
 u_max = fd.Constant(u_0)
 u_expr = fd.as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
 eta_expr = - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
-un = fd.Function(V1, name="Velocity").project(u_expr)
-etan = fd.Function(V2, name="Elevation").project(eta_expr)
+w0 = V1 * V2
+un, etan = w0.split()
+un.project(u_expr)
+etan.project(eta_expr)
 
 # Topography.
 rl = fd.pi/9.0
@@ -292,39 +283,12 @@ minarg = fd.Min(pow(rl, 2),
 bexpr = 2000.0*(1 - fd.sqrt(minarg)/rl)
 b.interpolate(bexpr)
 
-u0, h0 = Un.split()
-u0.assign(un)
-h0.assign(etan + H - b)
+alpha = fd.Constant(0.01)
+theta = fd.Constant(0.5)
 
-q = fd.TrialFunction(V0)
-p = fd.TestFunction(V0)
-
-qn = fd.Function(V0, name="Relative Vorticity")
-veqn = q*p*dx + fd.inner(perp(fd.grad(p)), un)*dx
-vprob = fd.LinearVariationalProblem(fd.lhs(veqn), fd.rhs(veqn), qn)
-qparams = {'ksp_type':'cg'}
-qsolver = fd.LinearVariationalSolver(vprob,
-                                     solver_parameters=qparams)
-
-file_sw = fd.File(name+'.pvd')
-etan.assign(h0 - H + b)
-un.assign(u0)
-qsolver.solve()
-file_sw.write(un, etan, qn)
-Unp1.assign(Un)
-
-print('tmax', tmax, 'dt', dt)
-while t < tmax + 0.5*dt:
-    print(t)
-    t += dt
-    tdump += dt
-
-    nsolver.solve()
-    Un.assign(Unp1)
-
-    if tdump > dumpt - dt*0.5:
-        etan.assign(h0 - H + b)
-        un.assign(u0)
-        qsolver.solve()
-        file_sw.write(un, etan, qn)
-        tdump -= dumpt
+PD = asQ.paradiag(form_function=form_function,
+                  form_mass=form_mass, W=W, w0=w0, dt=dt,
+                  theta=theta, alpha=alpha, M=M,
+                  solver_parameters=solver_parameters_diag,
+                  circ="quasi")
+PD.solve()
