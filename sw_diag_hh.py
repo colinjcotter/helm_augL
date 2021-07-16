@@ -9,12 +9,12 @@ parser = argparse.ArgumentParser(description='Williamson 5 testcase for approxim
 parser.add_argument('--base_level', type=int, default=1, help='Base refinement level of icosahedral grid for MG solve. Default 1.')
 parser.add_argument('--ref_level', type=int, default=3, help='Refinement level of icosahedral grid. Default 3.')
 parser.add_argument('--nsteps', type=float, default=4, help='Number of timesteps. Default 4.')
-parser.add_argument('--dumpt', type=float, default=24, help='Dump time in hours. Default 24.')
-parser.add_argument('--dt', type=float, default=1, help='Timestep in hours. Default 1.')
+parser.add_argument('--alpha', type=float, default=0.0001, help='Circulant coefficient. Default 0.0001.')
+parser.add_argument('--dt', type=float, default=0.05, help='Timestep in hours. Default 0.05.')
 parser.add_argument('--filename', type=str, default='w5diag')
 parser.add_argument('--coords_degree', type=int, default=1, help='Degree of polynomials for sphere mesh approximation.')
 parser.add_argument('--degree', type=int, default=1, help='Degree of finite element space (the DG space).')
-parser.add_argument('--kspschur', type=int, default=3, help='Number of KSP iterations on the Schur complement.')
+parser.add_argument('--kspschur', type=int, default=1, help='Number of KSP iterations on the Schur complement.')
 parser.add_argument('--kspmg', type=int, default=3, help='Number of KSP iterations in the MG levels.')
 parser.add_argument('--tlblock', type=str, default='patch', help='Solver for the velocity-velocity block. mg==Multigrid with patchPC, lu==direct solver with MUMPS, patch==just do a patch smoother. Default is patch')
 parser.add_argument('--show_args', action='store_true', help='Output all the arguments.')
@@ -146,11 +146,12 @@ class HelmholtzPC(fd.AuxiliaryOperatorPC):
         #Returning None as bcs
         return (a, None)
 
+#Parameters for the diag
 sparameters = {
     "mat_type":"matfree",
     "ksp_type": "fgmres",
+    "ksp_max_it": 50,
     "ksp_gmres_modifiedgramschmidt": None,
-    'ksp_converged_reason': None,
     "ksp_rtol": 1e-8,
     "pc_type": "fieldsplit",
     "pc_fieldsplit_type": "schur",
@@ -258,11 +259,19 @@ else:
     assert(args.tlblock=="lu")
     sparameters["fieldsplit_0"] = topleft_LU
 
+lu_parameters = {
+    "pc_type": "python",
+    "pc_python_type": "firedrake.AssembledPC",
+    "assembled_mat_type": "aij",
+    "assembled_pc_type": "lu",
+    "assembled_pc_factor_mat_solver_type": "mumps"
+}
+
 solver_parameters_diag = {
     #'snes_type': 'ksponly',
     'snes_monitor': None,
     'mat_type': 'matfree',
-    'ksp_type': 'preonly',
+    'ksp_type': 'fgmres',
     "ksp_gmres_modifiedgramschmidt": None,
     'ksp_converged_reason': None,
     'ksp_monitor': None,
@@ -299,7 +308,7 @@ minarg = fd.Min(pow(rl, 2),
 bexpr = 2000.0*(1 - fd.sqrt(minarg)/rl)
 b.interpolate(bexpr)
 
-alpha = 0.01
+alpha = args.alpha
 theta = 0.5
 
 PD = asQ.paradiag(form_function=form_function,
